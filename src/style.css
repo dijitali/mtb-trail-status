@@ -1,0 +1,122 @@
+body {
+  margin: 0;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+}
+
+h1 {
+  color: #333;
+  text-align: center;
+}
+
+#map {
+  height: 600px;
+  width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.trail-open {
+  color: green;
+  font-weight: bold;
+}
+
+.trail-closed {
+  color: red;
+  font-weight: bold;
+}
+
+.loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255,255,255,0.8);
+  padding: 20px;
+  border-radius: 5px;
+  z-index: 1000;
+  text-align: center;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.ol-popup {
+  position: absolute;
+  background-color: white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px solid #cccccc;
+  bottom: 12px;
+  left: -50px;
+  min-width: 200px;
+}
+
+.ol-popup:after, .ol-popup:before {
+  top: 100%;
+  border: solid transparent;
+  content: " ";
+  height: 0;
+  width: 0;
+  position: absolute;
+  pointer-events: none;
+}
+
+.ol-popup:after {
+  border-top-color: white;
+  border-width: 10px;
+  left: 48px;
+  margin-left: -10px;
+}
+
+.ol-popup:before {
+  border-top-color: #cccccc;
+  border-width: 11px;
+  left: 48px;
+  margin-left: -11px;
+}
+
+.ol-popup-closer {
+  text-decoration: none;
+  position: absolute;
+  top: 2px;
+  right: 8px;
+}
+
+.ol-popup-closer:after {
+  content: "✖";
+}
+
+.legend {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: white;
+  padding: 10px;
+  border-radius: 5px;
+  box-shadow: 0 0 5px rgba(0,0,0,0.2);
+  z-index: 1;
+  max-width: 200px;
+  line-height: 1.5;
+}
+
+.orientation-info {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: white;
+  padding: 10px;
+  border-radius: 5px;
+  box-shadow: 0 0 5px rgba(0,0,0,0.2);
+  z-index: 1;
+}
+
+.legend-item {
+  margin-bottom: 5px;
+}
+
+.grade-1 { color: #2ca02c; } /* Green - Grade 1 (Easiest) */
+.grade-2 { color: #1f77b4; } /* Blue - Grade 2 (Easy) */
+.grade-3 { color: #ff7f0e; } /* Orange - Grade 3 (Intermediate) */
+.grade-4 { color: #d62728; } /* Red - Grade 4 (Advanced) */
+.grade-5 { color: #9467bd; } /* Purple - Grade 5 (Expert) */
+.grade-6 { color: #000000; } /* Black - Grade 6 (Extreme) */
