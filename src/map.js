@@ -4,7 +4,7 @@ import { Tile as TileLayer, Vector as VectorLayer } from "ol/layer";
 import { Vector as VectorSource } from "ol/source";
 import { fromLonLat } from "ol/proj";
 import { Style, Stroke, Text, Fill } from "ol/style";
-import { getGradeColor, getGradeClass } from "./utils";
+import { config, getGradeDetails } from "./config";
 
 // Vector source to hold all trail features
 export const trailsSource = new VectorSource();
@@ -21,9 +21,11 @@ export function initMap() {
 
   const overlay = new Overlay({
     element: container,
-    autoPan: true,
-    autoPanAnimation: {
-      duration: 250,
+    autoPan: {
+      // Updated to OL6+ syntax for autoPan options
+      animation: {
+        duration: 250,
+      },
     },
   });
 
@@ -43,14 +45,20 @@ export function initMap() {
       const grade = feature.get("grade");
       const name = feature.get("name");
 
-      // Determine line color based on status
-      const color = status.toLowerCase() === "open" ? "green" : "red";
+      // Determine line color based on status from config
+      const statusLower = status.toLowerCase();
+      const lineColor =
+        config.trailLineStyles.statusColors[statusLower] ||
+        config.trailLineStyles.statusColors.unknown;
+
+      // Get grade details for label color
+      const gradeInfo = getGradeDetails(grade);
 
       // Create style for the line
       const lineStyle = new Style({
         stroke: new Stroke({
-          color: color,
-          width: 4,
+          color: lineColor,
+          width: config.trailLineStyles.lineWidth,
         }),
       });
 
@@ -58,17 +66,17 @@ export function initMap() {
       const textStyle = new Style({
         text: new Text({
           text: name,
-          font: "bold 12px Arial",
+          font: config.trailLabelStyles.font,
           fill: new Fill({
-            color: getGradeColor(grade),
+            color: gradeInfo.color, // Use color from configured grading system
           }),
           stroke: new Stroke({
-            color: "white",
-            width: 3,
+            color: config.trailLabelStyles.strokeColor,
+            width: config.trailLabelStyles.strokeWidth,
           }),
-          placement: "line",
-          overflow: true,
-          offsetY: 0,
+          placement: config.trailLabelStyles.placement,
+          overflow: config.trailLabelStyles.overflow,
+          offsetY: config.trailLabelStyles.offsetY,
         }),
       });
 
@@ -88,9 +96,10 @@ export function initMap() {
     ],
     overlays: [overlay],
     view: new View({
-      center: fromLonLat([175.029, -36.931]),
-      zoom: 13,
-      rotation: -Math.PI / 2, // 90 degrees in radians (East at top)
+      center: fromLonLat(config.mapDefaults.center),
+      zoom: config.mapDefaults.zoom,
+      // Convert degrees from config to radians for OpenLayers
+      rotation: (config.mapDefaults.rotation * Math.PI) / 180,
     }),
   });
 
@@ -105,15 +114,21 @@ export function initMap() {
       const status = feature.get("status");
       const grade = feature.get("grade");
       const comments = feature.get("comments");
+      const gradeInfo = getGradeDetails(grade);
+      const statusLower = status.toLowerCase();
 
       const statusClass =
-        status.toLowerCase() === "open" ? "trail-open" : "trail-closed";
-      const gradeClass = getGradeClass(grade);
+        config.popup.statusClasses[statusLower] ||
+        config.popup.statusClasses.unknown;
 
       content.innerHTML = `
         <h3>${name}</h3>
         <p>Status: <span class="${statusClass}">${status}</span></p>
-        <p>Grade: <span class="${gradeClass}">Grade ${grade}</span></p>
+        <p>Grade: <span class="${gradeInfo.className}" style="color: ${
+        gradeInfo.color
+      };">
+          ${gradeInfo.name} (Grade ${grade})
+        </span></p>
         ${comments ? `<p>${comments}</p>` : ""}
       `;
 

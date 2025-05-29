@@ -4,6 +4,7 @@ import { LineString } from "ol/geom";
 import { fromLonLat } from "ol/proj";
 import { trailsSource } from "./map";
 import { normalizeData } from "./utils";
+import { config } from "./config";
 
 // Track loading progress
 let pendingRequests = 0;
@@ -13,7 +14,14 @@ let pendingRequests = 0;
  * @param {Map} map - OpenLayers Map instance
  */
 export function loadTrailsFromCSV(map) {
-  Papa.parse("/trails.csv", {
+  const loadingElement = document.getElementById(
+    config.uiMessages.loadingElementId
+  );
+  if (loadingElement) {
+    loadingElement.innerHTML = config.uiMessages.initialLoading;
+    loadingElement.style.display = "block"; // Ensure it's visible
+  }
+  Papa.parse(config.dataFiles.trailsCsv, {
     download: true,
     header: true,
     skipEmptyLines: true,
@@ -23,48 +31,50 @@ export function loadTrailsFromCSV(map) {
       if (results.data && results.data.length > 0) {
         // Normalize column names to handle case sensitivity
         const normalizedData = normalizeData(results.data);
-
         console.log("Normalized data:", normalizedData);
 
         // Filter out any rows without OSM IDs
         const validTrails = normalizedData.filter((trail) => {
-          // Check for osmId in both original and lowercase form
-          return trail.osmid || trail.osmId || trail["osmid"];
+          // 'osmid' should be the lowercase key after normalization
+          return trail.osmid;
         });
 
         console.log("Valid trails:", validTrails);
 
         // Display trails
         validTrails.forEach((trail) => {
-          // Use either osmId or osmid, whichever exists
-          const id = trail.osmid || trail.osmId || trail["osmid"];
+          const id = trail.osmid; // Accessing via lowercase key
           displayOsmTrail(
             id,
             {
-              name: trail.name || trail["name"] || "",
-              status: trail.status || trail["status"] || "Unknown",
-              comments: trail.comments || trail["comments"] || "",
-              grade: trail.grade || trail["grade"] || "1", // Default to Grade 1 if not specified
+              name: trail.name || config.trailDefaults.name,
+              status: trail.status || config.trailDefaults.status,
+              comments: trail.comments || config.trailDefaults.comments,
+              grade: trail.grade || config.trailDefaults.grade,
             },
             map
           );
         });
 
         // If no valid trails were found
-        if (validTrails.length === 0) {
-          document.getElementById("loading").innerHTML =
-            'No valid trail data found. Make sure your CSV file has an "osmId" column. Available columns: ' +
-            Object.keys(results.data[0]).join(", ");
+        if (validTrails.length === 0 && loadingElement) {
+          const columnNames = results.data[0]
+            ? Object.keys(results.data[0])
+            : [];
+          loadingElement.innerHTML =
+            config.uiMessages.noValidTrails(columnNames);
         }
-      } else {
-        document.getElementById("loading").innerHTML =
-          "No trail data found in the CSV file.";
+      } else if (loadingElement) {
+        loadingElement.innerHTML = config.uiMessages.noDataInCsv;
       }
     },
     error: function (error) {
       console.error("Error parsing CSV:", error);
-      document.getElementById("loading").innerHTML =
-        'Error loading CSV file. Make sure "trails.csv" exists in the public folder.';
+      if (loadingElement) {
+        loadingElement.innerHTML = config.uiMessages.errorLoadingCsv(
+          config.dataFiles.trailsCsv
+        );
+      }
     },
   });
 }
@@ -87,7 +97,7 @@ function displayOsmTrail(osmId, trailInfo, map) {
     out body;
   `;
 
-  const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(
+  const overpassUrl = `${config.apiUrls.overpass}?data=${encodeURIComponent(
     overpassQuery
   )}`;
 
@@ -130,22 +140,29 @@ function displayOsmTrail(osmId, trailInfo, map) {
         // Fit the map to include all trails
         if (trailsSource.getFeatures().length === 1) {
           map.getView().fit(trailsSource.getExtent(), {
-            padding: [50, 50, 50, 50],
-            duration: 1000,
+            padding: config.mapDefaults.padding,
+            duration: config.mapDefaults.duration,
           });
         }
       } else {
-        console.warn(`Way ${osmId} not found in OSM data`);
+        console.warn(config.uiMessages.wayNotFound(osmId));
       }
     })
-    .catch((error) => console.error(`Error fetching OSM way ${osmId}:`, error))
+    .catch((error) => {
+      console.error(config.uiMessages.errorFetchingWay(osmId, error));
+    })
     .finally(() => {
       // Decrement pending requests counter
       pendingRequests--;
 
       // Hide loading indicator if all requests are complete
       if (pendingRequests === 0) {
-        document.getElementById("loading").style.display = "none";
+        const loadingElement = document.getElementById(
+          config.uiMessages.loadingElementId
+        );
+        if (loadingElement) {
+          loadingElement.style.display = "none";
+        }
       }
     });
 }
