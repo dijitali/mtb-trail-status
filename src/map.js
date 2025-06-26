@@ -45,25 +45,11 @@ export function initMap() {
       const grade = feature.get("grade");
       const name = feature.get("name");
 
-      // Determine line color based on status from config
-      const statusLower = status.toLowerCase();
-      const lineColor =
-        config.trailLineStyles.statusColors[statusLower] ||
-        config.trailLineStyles.statusColors.unknown;
-
       // Get grade details for label color
       const gradeInfo = getGradeDetails(grade);
 
-      // Create style for the line
-      const lineStyle = new Style({
-        stroke: new Stroke({
-          color: lineColor,
-          width: config.trailLineStyles.lineWidth,
-        }),
-      });
-
       // Create style for the text label
-      const textStyle = new Style({
+      const labelStyle = new Style({
         text: new Text({
           text: name,
           font: config.trailLabelStyles.font,
@@ -80,8 +66,42 @@ export function initMap() {
         }),
       });
 
-      // Return an array of styles
-      return [lineStyle, textStyle];
+      const statusLower = status.toLowerCase();
+      let lineStyles = [];
+
+      if (statusLower === "closed") {
+        // For closed trails: dashed yellow/black line
+        // 1. Solid black base line
+        lineStyles.push(
+          new Style({
+            stroke: new Stroke({
+              color: config.trailLineStyles.closedStyle.baseColorForDash,
+              width: config.trailLineStyles.lineWidth,
+            }),
+          })
+        );
+        // 2. Yellow dashed line on top
+        lineStyles.push(
+          new Style({
+            stroke: new Stroke({
+              color: config.trailLineStyles.closedStyle.dashColor,
+              width: config.trailLineStyles.lineWidth,
+              lineDash: config.trailLineStyles.closedStyle.lineDashPattern,
+            }),
+          })
+        );
+      } else {
+        // For open/other trails: solid line colored by grade
+        lineStyles.push(
+          new Style({
+            stroke: new Stroke({
+              color: gradeInfo.color, // Use grade color
+              width: config.trailLineStyles.lineWidth,
+            }),
+          })
+        );
+      }
+      return [...lineStyles, labelStyle];
     },
   });
 
