@@ -129,6 +129,7 @@ async function displayTrails(osmIds, trailsInfoMap, map) {
           status: trailInfo.status,
           grade: trailInfo.grade,
           comments: trailInfo.comments,
+          oneway: way.tags ? way.tags.oneway : undefined,
         });
 
         trailsSource.addFeature(feature);
