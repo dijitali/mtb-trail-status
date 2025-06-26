@@ -3,7 +3,8 @@ import { OSM } from "ol/source";
 import { Tile as TileLayer, Vector as VectorLayer } from "ol/layer";
 import { Vector as VectorSource } from "ol/source";
 import { fromLonLat } from "ol/proj";
-import { Style, Stroke, Text, Fill } from "ol/style";
+import { Point } from "ol/geom";
+import { Style, Stroke, Text, Fill, Icon } from "ol/style";
 import { config, getGradeDetails } from "./config";
 
 // Vector source to hold all trail features
@@ -45,8 +46,18 @@ export function initMap() {
       const grade = feature.get("grade");
       const name = feature.get("name");
 
+      const oneway = feature.get("oneway");
+
       // Get grade details for label color
       const gradeInfo = getGradeDetails(grade);
+
+      // Base style for the trail line
+      const lineStyle = new Style({
+        stroke: new Stroke({
+          color: gradeInfo.color, // Use grade color
+          width: config.trailLineStyles.lineWidth,
+        }),
+      });
 
       // Create style for the text label
       const labelStyle = new Style({
@@ -67,41 +78,59 @@ export function initMap() {
       });
 
       const statusLower = status.toLowerCase();
-      let lineStyles = [];
+      let styles = [lineStyle, labelStyle];
 
       if (statusLower === "closed") {
         // For closed trails: dashed yellow/black line
-        // 1. Solid black base line
-        lineStyles.push(
+        styles = [
           new Style({
             stroke: new Stroke({
               color: config.trailLineStyles.closedStyle.baseColorForDash,
               width: config.trailLineStyles.lineWidth,
             }),
-          })
-        );
-        // 2. Yellow dashed line on top
-        lineStyles.push(
+          }),
           new Style({
             stroke: new Stroke({
               color: config.trailLineStyles.closedStyle.dashColor,
               width: config.trailLineStyles.lineWidth,
               lineDash: config.trailLineStyles.closedStyle.lineDashPattern,
             }),
-          })
-        );
-      } else {
-        // For open/other trails: solid line colored by grade
-        lineStyles.push(
-          new Style({
-            stroke: new Stroke({
-              color: gradeInfo.color, // Use grade color
-              width: config.trailLineStyles.lineWidth,
+          }),
+          labelStyle,
+        ];
+      } else if (oneway) {
+        const geometry = feature.getGeometry();
+        const length = geometry.getLength();
+        const numArrows = Math.min(10, Math.floor(length / 50)); // Adjust 50 to control arrow density
+
+        for (let i = 1; i <= numArrows; i++) {
+          const fraction = i / (numArrows + 1);
+          const point = geometry.getCoordinateAt(fraction);
+
+          // To determine rotation, get a point slightly further along the line
+          const nextPointFraction = Math.min(fraction + 0.001, 1);
+          const nextPoint = geometry.getCoordinateAt(nextPointFraction);
+
+          const dx = nextPoint[0] - point[0];
+          const dy = nextPoint[1] - point[1];
+          const rotation = Math.atan2(dy, dx);
+
+          const arrowStyle = new Style({
+            geometry: new Point(point),
+            image: new Icon({
+              src: 'data:image/svg+xml;utf8,<svg width="24" height="24" viewBox="0 0 24 24" fill="gray" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 22h20L12 2z"/></svg>',
+              anchor: [0.5, 0.5],
+              rotateWithView: true,
+              rotation: -rotation,
+              scale: 0.5,
+              opacity: 0.8,
             }),
-          })
-        );
+          });
+          styles.push(arrowStyle);
+        }
       }
-      return [...lineStyles, labelStyle];
+
+      return styles;
     },
   });
 
