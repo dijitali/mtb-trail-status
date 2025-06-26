@@ -5,9 +5,7 @@ import { fromLonLat } from "ol/proj";
 import { trailsSource } from "./map";
 import { normalizeData } from "./utils";
 import { config } from "./config";
-
-// Track loading progress
-let pendingRequests = 0;
+import { getWaysByIds } from "./overpass-service.js";
 
 /**
  * Load trails from CSV file
@@ -25,7 +23,7 @@ export function loadTrailsFromCSV(map) {
     download: true,
     header: true,
     skipEmptyLines: true,
-    complete: function (results) {
+    complete: async function (results) {
       console.log("Parsed CSV data:", results.data);
 
       if (results.data && results.data.length > 0) {
@@ -33,31 +31,33 @@ export function loadTrailsFromCSV(map) {
         const normalizedData = normalizeData(results.data);
         console.log("Normalized data:", normalizedData);
 
-        // Filter out any rows without OSM IDs
-        const validTrails = normalizedData.filter((trail) => {
-          // 'osmid' should be the lowercase key after normalization
-          return trail.osmid;
-        });
+        // Create a map of trail info and a list of OSM IDs
+        const trailsInfoMap = new Map();
+        const osmIds = normalizedData
+          .map((trail) => {
+            // 'osmid' should be the lowercase key after normalization
+            const id = parseInt(trail.osmid, 10);
+            if (id && !isNaN(id)) {
+              trailsInfoMap.set(id, {
+                name: trail.name || config.trailDefaults.name,
+                status: trail.status || config.trailDefaults.status,
+                comments: trail.comments || config.trailDefaults.comments,
+                grade: trail.grade || config.trailDefaults.grade,
+              });
+              return id;
+            }
+            return null;
+          })
+          .filter((id) => id !== null);
 
-        console.log("Valid trails:", validTrails);
+        console.log("Valid trail OSM IDs:", osmIds);
 
-        // Display trails
-        validTrails.forEach((trail) => {
-          const id = trail.osmid; // Accessing via lowercase key
-          displayOsmTrail(
-            id,
-            {
-              name: trail.name || config.trailDefaults.name,
-              status: trail.status || config.trailDefaults.status,
-              comments: trail.comments || config.trailDefaults.comments,
-              grade: trail.grade || config.trailDefaults.grade,
-            },
-            map
-          );
-        });
+        if (osmIds.length > 0) {
+          await displayTrails(osmIds, trailsInfoMap, map);
+        }
 
         // If no valid trails were found
-        if (validTrails.length === 0 && loadingElement) {
+        if (osmIds.length === 0 && loadingElement) {
           const columnNames = results.data[0]
             ? Object.keys(results.data[0])
             : [];
@@ -80,52 +80,49 @@ export function loadTrailsFromCSV(map) {
 }
 
 /**
- * Fetch and display an OSM way using its ID
- * @param {string|number} osmId - OSM way ID
- * @param {Object} trailInfo - Trail information
- * @param {Map} map - OpenLayers Map instance
+ * Fetch and display OSM ways using their IDs in a batch.
+ * @param {number[]} osmIds An array of OpenStreetMap way IDs.
+ * @param {Map<number, Object>} trailsInfoMap - A map from OSM way ID to trail information.
+ * @param {import("ol/Map").default} map - OpenLayers Map instance
  */
-function displayOsmTrail(osmId, trailInfo, map) {
-  // Increment pending requests counter
-  pendingRequests++;
+async function displayTrails(osmIds, trailsInfoMap, map) {
+  const loadingElement = document.getElementById(
+    config.uiMessages.loadingElementId
+  );
+  try {
+    const elements = await getWaysByIds(osmIds);
 
-  // Overpass API query to get the way geometry
-  const overpassQuery = `
-    [out:json];
-    way(${osmId});
-    (._;>;);
-    out body;
-  `;
+    // We only need to process the 'way' elements from the response
+    const ways = elements.filter((element) => element.type === "way");
 
-  const overpassUrl = `${config.apiUrls.overpass}?data=${encodeURIComponent(
-    overpassQuery
-  )}`;
+    if (ways.length === 0) {
+      console.warn(config.uiMessages.wayNotFound(osmIds.join(", ")));
+      if (loadingElement) {
+        loadingElement.innerHTML = config.uiMessages.wayNotFound(
+          osmIds.join(", ")
+        );
+      }
+      return;
+    }
 
-  fetch(overpassUrl)
-    .then((response) => response.json())
-    .then((data) => {
-      // Extract nodes from the response
-      const nodes = {};
-      data.elements.forEach((element) => {
-        if (element.type === "node") {
-          nodes[element.id] = [element.lon, element.lat]; // Note: OpenLayers uses [lon, lat] order for fromLonLat
-        }
-      });
-
-      // Find the way and construct the path
-      const way = data.elements.find(
-        (element) => element.type === "way" && element.id == osmId
-      );
-      if (way) {
-        // Create coordinates array and transform to web mercator
-        const coordinates = way.nodes.map((nodeId) => {
-          return fromLonLat(nodes[nodeId]);
+    ways.forEach((way) => {
+      const trailInfo = trailsInfoMap.get(way.id);
+      // The 'geometry' property is added by 'out geom;'
+      if (way.geometry && trailInfo) {
+        // The geometry is an array of {lat, lon} objects
+        const coordinates = way.geometry.map((node) => {
+          return fromLonLat([node.lon, node.lat]);
         });
 
-        // Create a LineString geometry
+        if (coordinates.length < 2) {
+          console.warn(
+            `Way ${way.id} has fewer than 2 nodes with coordinates, skipping.`
+          );
+          return;
+        }
+
         const geometry = new LineString(coordinates);
 
-        // Create a feature with the geometry and properties
         const feature = new Feature({
           geometry: geometry,
           name: trailInfo.name,
@@ -134,35 +131,28 @@ function displayOsmTrail(osmId, trailInfo, map) {
           comments: trailInfo.comments,
         });
 
-        // Add the feature to the source
         trailsSource.addFeature(feature);
-
-        // Fit the map to include all trails
-        if (trailsSource.getFeatures().length === 1) {
-          map.getView().fit(trailsSource.getExtent(), {
-            padding: config.mapDefaults.padding,
-            duration: config.mapDefaults.duration,
-          });
-        }
       } else {
-        console.warn(config.uiMessages.wayNotFound(osmId));
-      }
-    })
-    .catch((error) => {
-      console.error(config.uiMessages.errorFetchingWay(osmId, error));
-    })
-    .finally(() => {
-      // Decrement pending requests counter
-      pendingRequests--;
-
-      // Hide loading indicator if all requests are complete
-      if (pendingRequests === 0) {
-        const loadingElement = document.getElementById(
-          config.uiMessages.loadingElementId
-        );
-        if (loadingElement) {
-          loadingElement.style.display = "none";
-        }
+        console.warn(`Could not find trail info or geometry for way ${way.id}`);
       }
     });
+
+    if (trailsSource.getFeatures().length > 0) {
+      map.getView().fit(trailsSource.getExtent(), {
+        padding: config.mapDefaults.padding,
+        duration: config.mapDefaults.duration,
+      });
+    }
+  } catch (error) {
+    console.error("Error displaying trails:", error);
+    if (loadingElement) {
+      loadingElement.innerHTML = config.uiMessages.errorLoadingCsv(
+        config.dataFiles.trailsCsv
+      ); // Or a more specific error
+    }
+  } finally {
+    if (loadingElement) {
+      loadingElement.style.display = "none";
+    }
+  }
 }

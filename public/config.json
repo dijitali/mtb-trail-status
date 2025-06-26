@@ -30,10 +30,10 @@
   },
   "trailLineStyles": {
     "lineWidth": 4,
-    "statusColors": {
-      "open": "green",
-      "closed": "red",
-      "unknown": "grey"
+    "closedStyle": {
+      "dashColor": "#FFFF00",
+      "baseColorForDash": "#000000",
+      "lineDashPattern": [10, 8]
     }
   },
   "trailLabelStyles": {
