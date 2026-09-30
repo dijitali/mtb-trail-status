@@ -42,11 +42,11 @@ async function main() {
       }
     },
     onSaveOffline: async () => {
-      const bbox = mapApi.trailsBbox();
-      if (!bbox) return;
+      const trailsBbox = mapApi.trailsBbox();
+      if (!trailsBbox) return;
       try {
         panel.setOfflineStatus("Saving…", true);
-        const result = await saveAreaForOffline(bbox, {
+        const result = await saveAreaForOffline({ trailsBbox, overview: mapApi.overviewCoverage() }, {
           onProgress: (done, total) => panel.setOfflineStatus(`Saving map tiles… ${done}/${total}`, true),
         });
         panel.setOfflineStatus(

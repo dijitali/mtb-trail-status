@@ -63,3 +63,25 @@ export function padBbox([west, south, east, north], fraction) {
   const dy = (north - south) * fraction;
   return [west - dx, south - dy, east + dx, north + dy];
 }
+
+/**
+ * Tile ranges to store for offline use. Two tiers keep the tile count sane:
+ * the whole fitted overview at low zooms (what the rider sees first), and
+ * only the padded trail area at high zooms (where tiles are small).
+ *
+ * @param {object} args
+ * @param {[number,number,number,number]} args.overviewBbox lon/lat bounds of the fitted overview viewport
+ * @param {number} args.overviewZoom zoom level of that overview
+ * @param {[number,number,number,number]} args.trailsBbox lon/lat bounds of the trails
+ * @param {number} args.minZoom
+ * @param {number} args.maxZoom
+ * @param {number} [args.trailPadding] fraction to pad the trail bbox by
+ */
+export function offlineTileRanges({ overviewBbox, overviewZoom, trailsBbox, minZoom, maxZoom, trailPadding = 0.3 }) {
+  const overviewMax = Math.min(maxZoom, Math.floor(overviewZoom) + 1);
+  const ranges = tileRangesForBbox(overviewBbox, minZoom, overviewMax);
+  if (overviewMax < maxZoom) {
+    ranges.push(...tileRangesForBbox(padBbox(trailsBbox, trailPadding), overviewMax + 1, maxZoom));
+  }
+  return ranges;
+}

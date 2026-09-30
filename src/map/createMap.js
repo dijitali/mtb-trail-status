@@ -27,9 +27,11 @@ export function createMap({ target, onSelect }) {
     updateWhileInteracting: true,
   });
 
+  // Without a configured centre, start zoomed right out so no tiles are wasted
+  // before the view is fitted to the trails.
   const view = new View({
     center: fromLonLat(config.map.center || [0, 0]),
-    zoom: config.map.zoom,
+    zoom: config.map.center ? config.map.zoom : 0,
     rotation: (config.map.rotation * Math.PI) / 180,
   });
 
@@ -92,5 +94,29 @@ export function createMap({ target, onSelect }) {
     return [...toLonLat([minX, minY]), ...toLonLat([maxX, maxY])];
   }
 
-  return { map, trailsSource, setTrails, fitToTrails, focusTrail, trailsBbox, clearSelection: () => select(null) };
+  /**
+   * The area and zoom the map shows when fitted to all trails, in lon/lat.
+   * Independent of the current view, so "save for offline" always covers the overview.
+   * @returns {{ bbox: [number,number,number,number], zoom: number } | null}
+   */
+  function overviewCoverage() {
+    const size = map.getSize();
+    if (trailsSource.isEmpty() || !size) return null;
+    const extent = trailsSource.getExtent();
+    const [pt, pr, pb, pl] = config.map.padding;
+    const innerSize = [size[0] - pl - pr, size[1] - pt - pb];
+    const resolution = view.getConstrainedResolution(view.getResolutionForExtent(extent, innerSize));
+    // Axis-aligned bounds of the (possibly rotated) viewport at that resolution.
+    const rotation = view.getRotation();
+    const halfW = (Math.abs(size[0] * Math.cos(rotation)) + Math.abs(size[1] * Math.sin(rotation))) * resolution / 2;
+    const halfH = (Math.abs(size[0] * Math.sin(rotation)) + Math.abs(size[1] * Math.cos(rotation))) * resolution / 2;
+    const cx = (extent[0] + extent[2]) / 2;
+    const cy = (extent[1] + extent[3]) / 2;
+    return {
+      bbox: [...toLonLat([cx - halfW, cy - halfH]), ...toLonLat([cx + halfW, cy + halfH])],
+      zoom: view.getZoomForResolution(resolution),
+    };
+  }
+
+  return { map, trailsSource, setTrails, fitToTrails, focusTrail, trailsBbox, overviewCoverage, clearSelection: () => select(null) };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { lonLatToTile, tileRangesForBbox, countTiles, tileUrls, padBbox } from "../src/lib/tiles.js";
+import { lonLatToTile, tileRangesForBbox, countTiles, tileUrls, padBbox, offlineTileRanges } from "../src/lib/tiles.js";
 
 describe("tile maths", () => {
   it("converts lon/lat to tile indices", () => {
@@ -27,5 +27,24 @@ describe("tile maths", () => {
 
   it("pads a bbox symmetrically", () => {
     expect(padBbox([0, 0, 10, 20], 0.1)).toEqual([-1, -2, 11, 22]);
+  });
+});
+
+describe("offlineTileRanges", () => {
+  const trailsBbox = [175.02, -36.92, 175.05, -36.89]; // ~3 km square
+  const overviewBbox = [174.93, -36.96, 175.14, -36.85]; // fitted viewport, wider than the trails
+
+  it("covers the overview at low zooms and only the trail area above it", () => {
+    const ranges = offlineTileRanges({ overviewBbox, overviewZoom: 13.4, trailsBbox, minZoom: 12, maxZoom: 16 });
+    expect(ranges.map((r) => r.z)).toEqual([12, 13, 14, 15, 16]);
+    expect(ranges[2]).toEqual(tileRangesForBbox(overviewBbox, 14, 14)[0]); // z14 still uses the overview bounds
+    const wideAt15 = tileRangesForBbox(overviewBbox, 15, 15)[0];
+    expect(ranges[3].xMax - ranges[3].xMin).toBeLessThan(wideAt15.xMax - wideAt15.xMin); // z15 narrows to the trails
+    expect(countTiles(ranges)).toBeLessThan(400);
+  });
+
+  it("does not exceed maxZoom when the overview is already zoomed in", () => {
+    const ranges = offlineTileRanges({ overviewBbox, overviewZoom: 16.5, trailsBbox, minZoom: 12, maxZoom: 16 });
+    expect(ranges.map((r) => r.z)).toEqual([12, 13, 14, 15, 16]);
   });
 });

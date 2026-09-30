@@ -8,7 +8,7 @@
  */
 import { registerSW } from "virtual:pwa-register";
 import { config, TILE_URL } from "./config";
-import { tileRangesForBbox, countTiles, tileUrls, padBbox } from "./lib/tiles";
+import { offlineTileRanges, countTiles, tileUrls } from "./lib/tiles";
 
 /** Register the service worker; resolves to true if one is active. */
 export function setupServiceWorker({ onUpdated } = {}) {
@@ -24,25 +24,30 @@ export function setupServiceWorker({ onUpdated } = {}) {
 }
 
 /**
- * Prefetch tiles for a bounding box through the service worker cache.
- * @param {[number, number, number, number]} bbox lon/lat [west, south, east, north]
+ * Prefetch tiles for the trail area through the service worker cache.
+ * @param {{ trailsBbox: number[], overview: { bbox: number[], zoom: number } }} area lon/lat bounds
  * @param {{ onProgress?: (done: number, total: number) => void }} [options]
  * @returns {Promise<{ total: number, failed: number }>}
  */
-export async function saveAreaForOffline(bbox, { onProgress } = {}) {
+export async function saveAreaForOffline({ trailsBbox, overview }, { onProgress } = {}) {
   if (!navigator.serviceWorker?.controller) {
     throw new Error("Offline storage isn't available yet. Reload the page and try again.");
   }
   const { minZoom, maxZoom, maxTiles } = config.offline;
-  // Generous padding: the view is rotated, so the visible area extends past the axis-aligned trail bbox.
-  const ranges = tileRangesForBbox(padBbox(bbox, 0.3), minZoom, maxZoom);
+  const ranges = offlineTileRanges({
+    overviewBbox: overview?.bbox || trailsBbox,
+    overviewZoom: overview?.zoom ?? maxZoom,
+    trailsBbox,
+    minZoom,
+    maxZoom,
+  });
   const total = countTiles(ranges);
   if (total > maxTiles) {
     throw new Error(`Area needs ${total} tiles, above the ${maxTiles} limit. Lower offline.maxZoom in config.json.`);
   }
 
   // Also refresh the data files so the cached copies are current.
-  const urls = [config.data.trails, config.data.geometry, ...tileUrls(ranges, TILE_URL)];
+  const urls = [config.data.trails, config.data.geometry, ...new Set(tileUrls(ranges, TILE_URL))];
   const isAbsolute = (url) => /^https?:/.test(url);
   let done = 0;
   let failed = 0;
