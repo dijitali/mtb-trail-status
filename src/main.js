@@ -78,7 +78,7 @@ async function main() {
     const { features, warnings } = await loadTrails();
     mapApi.setTrails({ type: "FeatureCollection", features });
     panel.setTrails(features);
-    mapApi.fitToTrails();
+    mapApi.fitToTrails(0); // instant on first load: no zoom-from-space animation, no wasted tile requests
     loading.hidden = true;
     if (!features.length) {
       showNotice("No trails could be loaded. Check trails.csv.", { error: true, timeout: 0 });
