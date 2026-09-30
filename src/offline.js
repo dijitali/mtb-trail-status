@@ -34,7 +34,8 @@ export async function saveAreaForOffline(bbox, { onProgress } = {}) {
     throw new Error("Offline storage isn't available yet. Reload the page and try again.");
   }
   const { minZoom, maxZoom, maxTiles } = config.offline;
-  const ranges = tileRangesForBbox(padBbox(bbox, 0.15), minZoom, maxZoom);
+  // Generous padding: the view is rotated, so the visible area extends past the axis-aligned trail bbox.
+  const ranges = tileRangesForBbox(padBbox(bbox, 0.3), minZoom, maxZoom);
   const total = countTiles(ranges);
   if (total > maxTiles) {
     throw new Error(`Area needs ${total} tiles, above the ${maxTiles} limit. Lower offline.maxZoom in config.json.`);
