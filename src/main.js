@@ -1,39 +1,96 @@
 import "ol/ol.css";
 import "./style.css";
-import { initMap } from "./map";
-import { loadTrailsFromCSV } from "./trailLoader";
-import { config, loadAppConfig } from "./config";
+import { config } from "./config";
+import { loadTrails } from "./data";
+import { createMap } from "./map/createMap";
+import { createPanel } from "./ui/panel";
+import { setupServiceWorker, saveAreaForOffline } from "./offline";
 
-// Main application entry point
+const $ = (selector) => document.querySelector(selector);
+
+function showNotice(message, { error = false, timeout = 6000 } = {}) {
+  const toast = $("#toast");
+  toast.textContent = message;
+  toast.classList.toggle("error", error);
+  toast.hidden = false;
+  clearTimeout(showNotice.timer);
+  if (timeout) showNotice.timer = setTimeout(() => (toast.hidden = true), timeout);
+}
+
+function updateConnectivity() {
+  $("#connectivity").hidden = navigator.onLine;
+}
+
 async function main() {
-  try {
-    // Load configuration first
-    // Assumes config.json is in the public folder and accessible at /config.json
-    await loadAppConfig("/config.json");
+  document.title = config.title;
+  $("#title").textContent = config.title;
 
-    // Now `config` object in config.js is populated and can be used by other modules
-    // Set page title from config
-    document.title = config.pageTitle;
+  const panelEl = $("#panel");
+  const toggle = $("#panel-toggle");
+  toggle.addEventListener("click", () => {
+    const open = panelEl.classList.toggle("open");
+    toggle.setAttribute("aria-expanded", String(open));
+  });
 
-    // Initialize the map
-    const map = initMap();
+  const panel = createPanel({
+    root: panelEl,
+    onTrailClick: (osmId) => {
+      mapApi.focusTrail(osmId);
+      if (window.matchMedia("(max-width: 720px)").matches) {
+        panelEl.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+      }
+    },
+    onSaveOffline: async () => {
+      const bbox = mapApi.trailsBbox();
+      if (!bbox) return;
+      try {
+        panel.setOfflineStatus("Saving…", true);
+        const result = await saveAreaForOffline(bbox, {
+          onProgress: (done, total) => panel.setOfflineStatus(`Saving map tiles… ${done}/${total}`, true),
+        });
+        panel.setOfflineStatus(
+          result.failed ? `Saved with ${result.failed} of ${result.total} tiles missing.` : `Saved ${result.total} tiles. The map now works offline.`
+        );
+      } catch (error) {
+        panel.setOfflineStatus(error.message);
+      }
+    },
+  });
 
-    // Load trails from CSV
-    loadTrailsFromCSV(map);
-  } catch (error) {
-    console.error("Failed to initialize the application:", error);
-    // Display a user-friendly error message on the page
-    const body = document.querySelector("body");
-    if (body) {
-      body.innerHTML = `<div style="padding: 20px; text-align: center; color: red; font-family: sans-serif;">
-                            <h1>Application Error</h1>
-                            <p>Could not start the application. This might be due to a problem loading essential configuration.</p>
-                            <p>Please try refreshing the page. If the problem persists, please contact support.</p>
-                          </div>`;
+  const mapApi = createMap({
+    target: "map",
+    onSelect: (feature) => panel.setSelected(feature ? feature.getId() : null),
+  });
+
+  window.addEventListener("online", updateConnectivity);
+  window.addEventListener("offline", updateConnectivity);
+  updateConnectivity();
+
+  setupServiceWorker({ onUpdated: () => showNotice("A new version is available. Reload to update.", { timeout: 0 }) }).then(
+    (active) => {
+      if (!active) panel.setOfflineUnavailable();
     }
+  );
+
+  const loading = $("#loading");
+  try {
+    const { features, warnings } = await loadTrails();
+    mapApi.setTrails({ type: "FeatureCollection", features });
+    panel.setTrails(features);
+    mapApi.fitToTrails();
+    loading.hidden = true;
+    if (!features.length) {
+      showNotice("No trails could be loaded. Check trails.csv.", { error: true, timeout: 0 });
+    } else if (warnings.length) {
+      console.warn("Trail data warnings:\n" + warnings.join("\n"));
+      showNotice(warnings[0], { error: true, timeout: 10000 });
+    }
+  } catch (error) {
+    console.error(error);
+    loading.hidden = true;
+    showNotice(`Couldn't load trail data: ${error.message}`, { error: true, timeout: 0 });
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  main();
-});
+main();

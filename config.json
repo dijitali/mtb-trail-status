@@ -1,0 +1,31 @@
+{
+  "title": "PCBC Interactive Trail Map",
+  "map": {
+    "tileUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "rotation": -90,
+    "zoom": 13,
+    "center": null,
+    "padding": [60, 60, 60, 60]
+  },
+  "grades": {
+    "1": { "name": "Easiest", "color": "#2ca02c" },
+    "2": { "name": "Easy", "color": "#1f77b4" },
+    "3": { "name": "Intermediate", "color": "#ff7f0e" },
+    "4": { "name": "Advanced", "color": "#d62728" },
+    "5": { "name": "Expert", "color": "#9467bd" },
+    "6": { "name": "Extreme", "color": "#000000" },
+    "default": { "name": "Ungraded", "color": "#777777" }
+  },
+  "data": {
+    "trails": "trails.csv",
+    "geometry": "trails.geojson"
+  },
+  "geometry": {
+    "osmApi": "https://api.openstreetmap.org/api/0.6"
+  },
+  "offline": {
+    "minZoom": 12,
+    "maxZoom": 16,
+    "maxTiles": 600
+  }
+}

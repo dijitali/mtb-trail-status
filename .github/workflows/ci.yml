@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # Every trail in trails.csv must have cached geometry so the site works offline
+      # and never depends on a live OpenStreetMap query. Fix with `npm run fetch-geometry`.
+      - run: npm run check-geometry
+      - run: npm run build

@@ -4,3 +4,5 @@ node = "lts"
 [tasks]
 dev = "npm run dev"
 test = "npm test"
+build = "npm run build"
+fetch-geometry = "npm run fetch-geometry"
