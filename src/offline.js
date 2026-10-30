@@ -7,7 +7,7 @@
  * the map is available before the rider loses signal.
  */
 import { registerSW } from "virtual:pwa-register";
-import { config, TILE_URL } from "./config";
+import { config, TILE_URL, parkDataUrl } from "./config";
 import { offlineTileRanges, countTiles, tileUrls } from "./lib/tiles";
 
 /** Register the service worker; resolves to true if one is active. */
@@ -25,29 +25,30 @@ export function setupServiceWorker({ onUpdated } = {}) {
 
 /**
  * Prefetch tiles for the trail area through the service worker cache.
- * @param {{ trailsBbox: number[], overview: { bbox: number[], zoom: number } }} area lon/lat bounds
+ * @param {{ dataBbox: number[], overview: { bbox: number[], zoom: number } }} area lon/lat bounds of the trails and places
  * @param {{ onProgress?: (done: number, total: number) => void }} [options]
  * @returns {Promise<{ total: number, failed: number }>}
  */
-export async function saveAreaForOffline({ trailsBbox, overview }, { onProgress } = {}) {
+export async function saveAreaForOffline({ dataBbox, overview }, { onProgress } = {}) {
   if (!navigator.serviceWorker?.controller) {
     throw new Error("Offline storage isn't available yet. Reload the page and try again.");
   }
   const { minZoom, maxZoom, maxTiles } = config.offline;
   const ranges = offlineTileRanges({
-    overviewBbox: overview?.bbox || trailsBbox,
+    overviewBbox: overview?.bbox || dataBbox,
     overviewZoom: overview?.zoom ?? maxZoom,
-    trailsBbox,
+    trailsBbox: dataBbox,
     minZoom,
     maxZoom,
   });
   const total = countTiles(ranges);
   if (total > maxTiles) {
-    throw new Error(`Area needs ${total} tiles, above the ${maxTiles} limit. Lower offline.maxZoom in config.json.`);
+    throw new Error(`Area needs ${total} tiles, above the ${maxTiles} limit. Lower offline.maxZoom in park.json.`);
   }
 
   // Also refresh the data files so the cached copies are current.
-  const urls = [config.data.trails, config.data.geometry, ...new Set(tileUrls(ranges, TILE_URL))];
+  const dataFiles = [config.data.trails, config.data.pois, config.data.geometry].filter(Boolean).map(parkDataUrl);
+  const urls = [...dataFiles, ...new Set(tileUrls(ranges, TILE_URL))];
   const isAbsolute = (url) => /^https?:/.test(url);
   let done = 0;
   let failed = 0;

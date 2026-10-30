@@ -95,6 +95,15 @@ body { display: flex; flex-direction: column; }
 
 .legend ul { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; }
 .legend li { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.legend-places { margin-top: 8px !important; }
+.legend-places .poi-icon { margin: 0 6px; }
+.poi-icon { flex: 0 0 auto; display: block; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.place-type { font-size: 0.78rem; white-space: nowrap; }
+.popup .poi-type { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.popup .poi-coords { font-variant-numeric: tabular-nums; }
+.popup .poi-links { display: flex; gap: 14px; }
+.popup .poi-links a { color: var(--accent); font-weight: 600; }
 .swatch { display: inline-block; width: 28px; height: 6px; border-radius: 3px; }
 .swatch-closed { background: repeating-linear-gradient(90deg, var(--closed-color, #9fb0bd) 0 9px, transparent 9px 15px); }
 .trail-closed .trail-name { color: var(--muted); }

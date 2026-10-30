@@ -1,7 +1,7 @@
 import "ol/ol.css";
 import "./style.css";
 import { config } from "./config";
-import { loadTrails } from "./data";
+import { loadParkData } from "./data";
 import { createMap } from "./map/createMap";
 import { createPanel } from "./ui/panel";
 import { setupServiceWorker, saveAreaForOffline } from "./offline";
@@ -24,6 +24,7 @@ function updateConnectivity() {
 async function main() {
   document.title = config.title;
   $("#title").textContent = config.title;
+  document.documentElement.style.setProperty("--accent", config.themeColor);
 
   const panelEl = $("#panel");
   const toggle = $("#panel-toggle");
@@ -32,21 +33,30 @@ async function main() {
     toggle.setAttribute("aria-expanded", String(open));
   });
 
+  // On phones the panel covers the map, so close it after a choice.
+  function closePanelOnPhone() {
+    if (window.matchMedia("(max-width: 720px)").matches) {
+      panelEl.classList.remove("open");
+      toggle.setAttribute("aria-expanded", "false");
+    }
+  }
+
   const panel = createPanel({
     root: panelEl,
     onTrailClick: (osmId) => {
       mapApi.focusTrail(osmId);
-      if (window.matchMedia("(max-width: 720px)").matches) {
-        panelEl.classList.remove("open");
-        toggle.setAttribute("aria-expanded", "false");
-      }
+      closePanelOnPhone();
+    },
+    onPoiClick: (id) => {
+      mapApi.focusPoi(id);
+      closePanelOnPhone();
     },
     onSaveOffline: async () => {
-      const trailsBbox = mapApi.trailsBbox();
-      if (!trailsBbox) return;
+      const dataBbox = mapApi.dataBbox();
+      if (!dataBbox) return;
       try {
         panel.setOfflineStatus("Saving…", true);
-        const result = await saveAreaForOffline({ trailsBbox, overview: mapApi.overviewCoverage() }, {
+        const result = await saveAreaForOffline({ dataBbox, overview: mapApi.overviewCoverage() }, {
           onProgress: (done, total) => panel.setOfflineStatus(`Saving map tiles… ${done}/${total}`, true),
         });
         panel.setOfflineStatus(
@@ -60,7 +70,7 @@ async function main() {
 
   const mapApi = createMap({
     target: "map",
-    onSelect: (feature) => panel.setSelected(feature ? feature.getId() : null),
+    onSelect: (feature) => panel.setSelected(feature ? `${feature.get("kind") === "poi" ? "poi" : "trail"}:${feature.getId()}` : null),
   });
 
   window.addEventListener("online", updateConnectivity);
@@ -75,15 +85,17 @@ async function main() {
 
   const loading = $("#loading");
   try {
-    const { features, warnings } = await loadTrails();
+    const { features, pois, warnings } = await loadParkData();
     mapApi.setTrails({ type: "FeatureCollection", features });
+    mapApi.setPois(pois);
     panel.setTrails(features);
-    mapApi.fitToTrails(0); // instant on first load: no zoom-from-space animation, no wasted tile requests
+    panel.setPois(pois);
+    mapApi.fitToData(0); // instant on first load: no zoom-from-space animation, no wasted tile requests
     loading.hidden = true;
     if (!features.length) {
       showNotice("No trails could be loaded. Check trails.csv.", { error: true, timeout: 0 });
     } else if (warnings.length) {
-      console.warn("Trail data warnings:\n" + warnings.join("\n"));
+      console.warn("Park data warnings:\n" + warnings.join("\n"));
       showNotice(warnings[0], { error: true, timeout: 10000 });
     }
   } catch (error) {

@@ -1,5 +1,9 @@
 /**
- * OpenLayers styling for trail features.
+ * OpenLayers styling for trail lines and their labels.
+ *
+ * Lines and arrows are drawn by the trails layer; names are drawn by a
+ * separate labels layer stacked above it (see createMap), so a name is never
+ * painted over by another trail's line or arrows.
  *
  * Styles are cached: OL calls the style function on every render frame for
  * every feature, so allocating new Style objects each time is a common
@@ -19,7 +23,19 @@ const CLOSED_CASING = "rgba(255, 255, 255, 0.85)";
 const ARROW_SPACING_PX = 90;
 const ARROW_MAX_RESOLUTION = 4; // metres/pixel, roughly zoom 15+. Arrows are noise when zoomed out.
 const HALO_WIDTH = 14;
-const LABEL_FONT = "bold 12px system-ui, sans-serif";
+
+// Names use dark ink on a solid white halo rather than the grade colour, which
+// was hard to read for orange and green over forest. They are set horizontally
+// at the middle of the trail: text bent along a twisting singletrack squashes
+// and overlaps its own letters at every switchback.
+const LABEL_FONT = "600 13px system-ui, -apple-system, 'Segoe UI', sans-serif";
+const LABEL_FONT_SELECTED = "700 14px system-ui, -apple-system, 'Segoe UI', sans-serif";
+const LABEL_INK = "#17201b";
+const LABEL_INK_CLOSED = "#5f6b63";
+const LABEL_HALO = "rgba(255, 255, 255, 0.96)";
+
+/** Label anchor: halfway along the trail. */
+const labelAnchor = (feature) => new Point(feature.getGeometry().getCoordinateAt(0.5));
 
 // Right-pointing chevron; rotated to follow the line direction.
 const ARROW_SRC =
@@ -34,27 +50,38 @@ const ARROW_SRC =
 const baseStyleCache = new Map();
 const arrowStyleCache = new Map();
 
-function labelStyle(name, color) {
-  return new Style({
+const labelStyleCache = new Map();
+
+/** Style function for the labels layer: one name per trail. */
+export function trailLabelStyle(feature) {
+  const closed = feature.get("status") === "closed";
+  const selected = Boolean(feature.get("selected"));
+  const name = feature.get("name") || "";
+  const key = `${name}|${closed}|${selected}`;
+  let style = labelStyleCache.get(key);
+  if (style) return style;
+  style = new Style({
+    geometry: labelAnchor,
     text: new Text({
-      text: name,
-      font: LABEL_FONT,
-      placement: "line",
-      overflow: true, // sinuous trails rarely "fit" a label; declutter handles overlaps
-      declutterMode: "declutter",
-      fill: new Fill({ color }),
-      stroke: new Stroke({ color: "rgba(255,255,255,0.95)", width: 3 }),
+      text: closed ? `${name} (closed)` : name,
+      font: selected ? LABEL_FONT_SELECTED : LABEL_FONT,
+      fill: new Fill({ color: closed ? LABEL_INK_CLOSED : LABEL_INK }),
+      stroke: new Stroke({ color: LABEL_HALO, width: 4 }),
+      padding: [2, 4, 2, 4], // a little breathing room between neighbouring names when decluttering
     }),
+    // Selected and open trails win label collisions.
+    zIndex: selected ? 2 : closed ? 0 : 1,
   });
+  labelStyleCache.set(key, style);
+  return style;
 }
 
-/** Line + label styles for a trail, cached by the properties that affect them. */
+/** Line styles for a trail, cached by the properties that affect them. */
 function baseStyles(feature) {
-  const name = feature.get("name") || "";
   const status = feature.get("status");
   const grade = feature.get("grade");
   const selected = Boolean(feature.get("selected"));
-  const key = `${status}|${grade}|${selected}|${name}`;
+  const key = `${status}|${grade}|${selected}`;
 
   let styles = baseStyleCache.get(key);
   if (styles) return styles;
@@ -70,10 +97,8 @@ function baseStyles(feature) {
       new Style({ stroke: new Stroke({ color: CLOSED_CASING, width: LINE_WIDTH + 2 }) }),
       new Style({ stroke: new Stroke({ color: faded, width: LINE_WIDTH, lineDash: CLOSED_DASH_PATTERN, lineCap: "butt" }) })
     );
-    styles.push(labelStyle(`${name} (closed)`, muted(color, 0.35)));
   } else {
     styles.push(new Style({ stroke: new Stroke({ color, width: LINE_WIDTH }) }));
-    styles.push(labelStyle(name, color));
   }
   baseStyleCache.set(key, styles);
   return styles;
@@ -99,7 +124,6 @@ function arrowStyles(feature, resolution) {
           rotateWithView: true,
           rotation: -angle, // OL rotation is clockwise; angle is counter-clockwise
           scale: 0.9,
-          declutterMode: "obstacle", // labels avoid arrows, arrows are always drawn
         }),
       })
   );
@@ -107,7 +131,7 @@ function arrowStyles(feature, resolution) {
   return styles;
 }
 
-/** Style function for the trails vector layer. */
+/** Style function for the trails layer: lines and direction arrows, no text. */
 export function trailStyle(feature, resolution) {
   return [...baseStyles(feature), ...arrowStyles(feature, resolution)];
 }

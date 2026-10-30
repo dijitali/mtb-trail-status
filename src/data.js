@@ -1,32 +1,53 @@
 /**
- * Loads trail data: the club-maintained CSV plus the committed geometry
- * cache, with a live OSM API fallback for any trail not yet cached.
+ * Loads the park's data: the club-maintained trails CSV plus the committed
+ * geometry cache (with a live OSM API fallback for any trail not yet cached),
+ * and the optional points-of-interest CSV.
  */
-import { config } from "./config";
+import { config, parkDataUrl } from "./config";
 import { parseTrailsCsv, joinTrailsWithGeometry, mergeTrailFeature } from "./lib/trails";
+import { parsePoisCsv } from "./lib/pois";
 import { fetchWayFeatures } from "./lib/osm";
+
+class NotFoundError extends Error {}
 
 async function fetchText(url) {
   const response = await fetch(url, { cache: "no-cache" });
+  if (response.status === 404) throw new NotFoundError(`${url} not found`);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  // Single-page hosts often answer a missing file with index.html and a 200; treat that as missing.
+  if ((response.headers.get("content-type") || "").includes("text/html")) throw new NotFoundError(`${url} not found`);
   return response.text();
 }
 
+async function loadPois(warnings) {
+  if (!config.data.pois) return [];
+  try {
+    const { pois, errors } = parsePoisCsv(await fetchText(parkDataUrl(config.data.pois)));
+    warnings.push(...errors);
+    return pois;
+  } catch (error) {
+    // A park without a places file is normal; anything else is worth reporting.
+    if (!(error instanceof NotFoundError)) warnings.push(`Couldn't load places: ${error.message}`);
+    return [];
+  }
+}
+
 /**
- * @returns {Promise<{ features: object[], trails: object[], warnings: string[] }>}
+ * @returns {Promise<{ features: object[], trails: object[], pois: object[], warnings: string[] }>}
  *   `features` are GeoJSON Features with CSV properties merged in.
  */
-export async function loadTrails() {
+export async function loadParkData() {
   const warnings = [];
 
-  const [csvText, geometry] = await Promise.all([
-    fetchText(config.data.trails),
-    fetchText(config.data.geometry)
+  const [csvText, geometry, pois] = await Promise.all([
+    fetchText(parkDataUrl(config.data.trails)),
+    fetchText(parkDataUrl(config.data.geometry))
       .then((text) => JSON.parse(text))
       .catch((error) => {
         warnings.push(`Geometry cache unavailable (${error.message}); fetching live from OpenStreetMap.`);
         return { features: [] };
       }),
+    loadPois(warnings),
   ]);
 
   const { trails, errors } = parseTrailsCsv(csvText);
@@ -51,5 +72,5 @@ export async function loadTrails() {
     }
   }
 
-  return { features, trails, warnings };
+  return { features, trails, pois, warnings };
 }

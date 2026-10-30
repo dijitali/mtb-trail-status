@@ -1,30 +1,30 @@
 #!/usr/bin/env node
 /**
  * Snapshot trail geometry from OpenStreetMap, plus an elevation profile for
- * each trail, into public/trails.geojson.
+ * each trail, into the park's geometry cache (parks/<park>/trails.geojson).
  *
  *   npm run fetch-geometry                  # fetch anything missing from the cache
  *   npm run fetch-geometry -- --all         # re-fetch every trail and profile (picks up OSM edits)
  *   npm run fetch-geometry -- --profiles    # re-fetch every elevation profile only
  *   npm run fetch-geometry -- --check       # exit 1 if anything is missing (no network)
  *
+ * The park defaults to "config.park" in package.json; choose another with
+ * PARK=<folder> or --park=<folder>. `--check --every-park` checks them all.
+ *
  * The app reads this file at runtime so visitors never depend on a live OSM
  * or elevation query, and so the map and profiles keep working offline.
  */
 import { readFile, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { parseTrailsCsv } from "../src/lib/trails.js";
 import { fetchWayFeatures } from "../src/lib/osm.js";
 import { samplePoints, buildProfile } from "../src/lib/profile.js";
 import { fetchElevations } from "../src/lib/elevation.js";
-import config from "../config.json" with { type: "json" };
+import { ROOT, loadPark, listParks } from "./park.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const csvPath = path.join(root, "public", config.data.trails);
-const geojsonPath = path.join(root, "public", config.data.geometry);
-const args = new Set(process.argv.slice(2));
-const elevation = config.elevation || null;
+const argv = process.argv.slice(2);
+const args = new Set(argv.filter((a) => !a.startsWith("--park=")));
+const parkArg = argv.find((a) => a.startsWith("--park="))?.slice("--park=".length);
 
 /** Pretty-print with one coordinate pair per line and each elevation list on one line, so diffs stay readable. */
 function serialiseGeoJson(collection) {
@@ -35,7 +35,7 @@ function serialiseGeoJson(collection) {
   );
 }
 
-async function readCache() {
+async function readCache(geojsonPath) {
   try {
     return JSON.parse(await readFile(geojsonPath, "utf8"));
   } catch (error) {
@@ -45,7 +45,7 @@ async function readCache() {
 }
 
 /** Sample every feature's line, look up all the points in shared batches, and attach profiles. */
-async function addProfiles(features) {
+async function addProfiles(features, elevation) {
   const step = elevation.step || 10;
   const samples = features.map((f) => samplePoints(f.geometry.coordinates, step));
   const allPoints = samples.flatMap((s) => s.points);
@@ -64,11 +64,17 @@ async function addProfiles(features) {
   });
 }
 
-async function main() {
-  const { trails, errors } = parseTrailsCsv(await readFile(csvPath, "utf8"));
-  for (const message of errors) console.warn(`warning: ${message}`);
+async function processPark(parkId) {
+  const { id, dir, config } = loadPark(parkId);
+  const elevation = config.elevation;
+  const csvPath = path.join(dir, config.data.trails);
+  const geojsonPath = path.join(dir, config.data.geometry);
+  const label = `[${id}]`;
 
-  const cache = await readCache();
+  const { trails, errors } = parseTrailsCsv(await readFile(csvPath, "utf8"));
+  for (const message of errors) console.warn(`${label} warning: ${message}`);
+
+  const cache = await readCache(geojsonPath);
   const cached = new Map(cache.features.map((f) => [Number(f.properties.osmId), f]));
   const wanted = trails.map((t) => t.osmId);
   const missing = wanted.filter((id) => !cached.has(id));
@@ -77,19 +83,19 @@ async function main() {
   if (args.has("--check")) {
     let ok = true;
     if (missing.length) {
-      console.error(`Missing geometry for ${missing.length} trail(s): ${missing.join(", ")}`);
+      console.error(`${label} Missing geometry for ${missing.length} trail(s): ${missing.join(", ")}`);
       ok = false;
     }
     if (noProfile.length) {
-      console.error(`Missing elevation profile for ${noProfile.length} trail(s): ${noProfile.join(", ")}`);
+      console.error(`${label} Missing elevation profile for ${noProfile.length} trail(s): ${noProfile.join(", ")}`);
       ok = false;
     }
     if (!ok) {
-      console.error("Run `npm run fetch-geometry` and commit the updated trails.geojson.");
-      process.exit(1);
+      console.error(`${label} Run \`PARK=${id} npm run fetch-geometry\` and commit the updated ${config.data.geometry}.`);
+      return false;
     }
-    console.log(`All ${wanted.length} trails have cached geometry${elevation ? " and profiles" : ""}.`);
-    return;
+    console.log(`${label} All ${wanted.length} trails have cached geometry${elevation ? " and profiles" : ""}.`);
+    return true;
   }
 
   let failed = false;
@@ -113,7 +119,7 @@ async function main() {
       .filter((f) => refreshAll || !f.properties.profile);
     if (needProfile.length) {
       try {
-        await addProfiles(needProfile);
+        await addProfiles(needProfile, elevation);
       } catch (error) {
         console.error(`error: elevation lookup failed: ${error.message}`);
         failed = true;
@@ -122,8 +128,8 @@ async function main() {
   }
 
   if (!toFetch.length && !failed && cache.features.length && !args.has("--profiles") && !noProfile.length) {
-    console.log("Cache is up to date; nothing to fetch.");
-    return;
+    console.log(`${label} Cache is up to date; nothing to fetch.`);
+    return true;
   }
 
   // Keep only trails still listed in the CSV, in CSV order, so the file stays tidy.
@@ -136,11 +142,18 @@ async function main() {
     features: wanted.filter((id) => cached.has(id)).map((id) => cached.get(id)),
   };
   await writeFile(geojsonPath, serialiseGeoJson(output));
-  console.log(`Wrote ${output.features.length} feature(s) to ${path.relative(root, geojsonPath)}`);
-  if (failed) process.exit(1);
+  console.log(`${label} Wrote ${output.features.length} feature(s) to ${path.relative(ROOT, geojsonPath)}`);
+  return !failed;
+}
+
+async function main() {
+  const parks = args.has("--every-park") ? listParks() : [parkArg];
+  let ok = true;
+  for (const park of parks) ok = (await processPark(park)) && ok;
+  if (!ok) process.exit(1);
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(process.env.DEBUG ? error : `error: ${error.message}`);
   process.exit(1);
 });

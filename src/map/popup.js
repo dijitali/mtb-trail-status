@@ -5,6 +5,8 @@
 import { Overlay } from "ol";
 import { getGrade } from "../config";
 import { createProfileChart } from "../ui/profileChart";
+import { POI_TYPES, typeLabelFor } from "../lib/pois";
+import { poiIconSrc } from "./poiStyles";
 
 /**
  * @param {import("ol/Map").default} map
@@ -39,10 +41,15 @@ export function createPopup(map, { onProfileHover } = {}) {
   function show(feature, coordinate) {
     if (shownFeature && shownFeature !== feature) onProfileHover?.(shownFeature, null);
     shownFeature = feature;
+    body.replaceChildren(...(feature.get("kind") === "poi" ? poiContent(feature) : trailContent(feature)).filter(Boolean));
+    overlay.setPosition(coordinate);
+  }
+
+  function trailContent(feature) {
     const grade = getGrade(feature.get("grade"));
     const status = feature.get("status");
     const profile = feature.get("profile");
-    const children = [
+    return [
       el("h3", { textContent: feature.get("name") }),
       el("p", {}, [
         el("span", { className: `status-badge status-${status}`, textContent: feature.get("statusLabel") }),
@@ -50,7 +57,7 @@ export function createPopup(map, { onProfileHover } = {}) {
         el("span", {
           className: "grade-chip",
           style: `--grade-color: ${grade.color}`,
-          textContent: feature.get("grade") ? `Grade ${feature.get("grade")} · ${grade.name}` : grade.name,
+          textContent: grade.display,
         }),
       ]),
       feature.get("comments") ? el("p", { textContent: feature.get("comments") }) : null,
@@ -68,11 +75,29 @@ export function createPopup(map, { onProfileHover } = {}) {
           })
         : el("p", { className: "muted", textContent: "No elevation profile for this trail yet." }),
     ];
-    body.replaceChildren(...children.filter(Boolean));
-    overlay.setPosition(coordinate);
   }
 
   return { show, hide, overlay };
+}
+
+function poiContent(feature) {
+  const { name, type, lat, lon, description } = feature.getProperties();
+  const coords = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  const link = (href, text) => el("a", { href, textContent: text, target: "_blank", rel: "noopener" });
+  return [
+    el("h3", { textContent: name }),
+    el("p", { className: "poi-type" }, [
+      el("img", { src: poiIconSrc(type), alt: "", width: 18, height: 18 }),
+      // Always name the type for screen readers; show it only when the place name doesn't already.
+      typeLabelFor({ name, type }) ?? el("span", { className: "visually-hidden", textContent: (POI_TYPES[type] || POI_TYPES.other).label }),
+    ]),
+    description ? el("p", { textContent: description }) : null,
+    el("p", { className: "muted poi-coords", textContent: coords }),
+    el("p", { className: "poi-links" }, [
+      link(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`, "Directions"),
+      link(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}`, "OpenStreetMap"),
+    ]),
+  ];
 }
 
 function el(tag, props = {}, children = []) {

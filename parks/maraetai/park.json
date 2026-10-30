@@ -1,0 +1,14 @@
+{
+  "title": "PCBC Interactive Trail Map",
+  "shortName": "PCBC Trails",
+  "description": "Maraetai Forest mountain bike trails: difficulty grades, open/closed status and elevation profiles.",
+  "themeColor": "#1b5e20",
+  "map": {
+    "rotation": -90
+  },
+  "grading": "nz",
+  "elevation": {
+    "dataset": "nzdem8m",
+    "attribution": "Elevation: LINZ NZ 8m Digital Elevation Model (CC BY 4.0) via OpenTopoData"
+  }
+}

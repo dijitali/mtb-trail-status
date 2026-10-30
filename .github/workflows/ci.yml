@@ -16,7 +16,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      # Every trail in trails.csv must have cached geometry so the site works offline
-      # and never depends on a live OpenStreetMap query. Fix with `npm run fetch-geometry`.
+      # Every park's trails must have cached geometry and profiles so the site works
+      # offline and never depends on a live query. Fix with `PARK=<park> npm run fetch-geometry`.
       - run: npm run check-geometry
-      - run: npm run build
+      - name: Build every park
+        run: |
+          set -e
+          for dir in parks/*/; do
+            park=$(basename "$dir")
+            [ -f "$dir/park.json" ] || continue
+            echo "::group::Build $park"
+            PARK="$park" npx vite build --outDir "dist/$park"
+            echo "::endgroup::"
+          done
