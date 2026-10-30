@@ -23,6 +23,12 @@
   "geometry": {
     "osmApi": "https://api.openstreetmap.org/api/0.6"
   },
+  "elevation": {
+    "api": "https://api.opentopodata.org/v1",
+    "dataset": "nzdem8m",
+    "step": 10,
+    "attribution": "Elevation: LINZ NZ 8m Digital Elevation Model (CC BY 4.0) via OpenTopoData"
+  },
   "offline": {
     "minZoom": 12,
     "maxZoom": 16,

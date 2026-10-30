@@ -7,6 +7,9 @@ import { OSM, Vector as VectorSource } from "ol/source";
 import { Tile as TileLayer, Vector as VectorLayer } from "ol/layer";
 import { fromLonLat, toLonLat } from "ol/proj";
 import { GeoJSON } from "ol/format";
+import { Feature } from "ol";
+import { Point } from "ol/geom";
+import { Style, Circle as CircleStyle, Fill, Stroke } from "ol/style";
 import { defaults as defaultControls, ScaleLine } from "ol/control";
 import { config, TILE_URL } from "../config";
 import { trailStyle } from "./styles";
@@ -35,14 +38,33 @@ export function createMap({ target, onSelect }) {
     rotation: (config.map.rotation * Math.PI) / 180,
   });
 
+  // Marker that follows the cursor on a trail's elevation profile.
+  const profileMarker = new Feature();
+  const markerLayer = new VectorLayer({
+    source: new VectorSource({ features: [profileMarker] }),
+    style: new Style({
+      image: new CircleStyle({
+        radius: 7,
+        fill: new Fill({ color: "#0d366b" }),
+        stroke: new Stroke({ color: "#ffffff", width: 3 }),
+      }),
+    }),
+    updateWhileAnimating: true,
+    updateWhileInteracting: true,
+  });
+
   const map = new Map({
     target,
-    layers: [new TileLayer({ source: new OSM({ url: TILE_URL, crossOrigin: null }) }), trailsLayer],
+    layers: [new TileLayer({ source: new OSM({ url: TILE_URL, crossOrigin: null }) }), trailsLayer, markerLayer],
     view,
     controls: defaultControls({ rotate: true }).extend([new ScaleLine()]),
   });
 
-  const popup = createPopup(map);
+  const popup = createPopup(map, {
+    onProfileHover: (feature, fraction) => {
+      profileMarker.setGeometry(fraction == null ? undefined : new Point(feature.getGeometry().getCoordinateAt(fraction)));
+    },
+  });
   let selected = null;
 
   function select(feature, coordinate) {
@@ -83,8 +105,14 @@ export function createMap({ target, onSelect }) {
   function focusTrail(osmId) {
     const feature = trailsSource.getFeatureById(osmId);
     if (!feature) return;
-    view.fit(feature.getGeometry().getExtent(), { padding: config.map.padding, duration: 500, maxZoom: 17 });
-    select(feature);
+    if (selected && selected !== feature) popup.hide();
+    // Open the popup once the view has settled, so its auto-pan isn't overridden by the fit animation.
+    view.fit(feature.getGeometry().getExtent(), {
+      padding: config.map.padding,
+      duration: 500,
+      maxZoom: 17,
+      callback: () => select(feature),
+    });
   }
 
   /** Bounding box of all trails in lon/lat: [west, south, east, north]. */

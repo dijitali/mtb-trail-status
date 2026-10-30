@@ -4,8 +4,13 @@
  */
 import { Overlay } from "ol";
 import { getGrade } from "../config";
+import { createProfileChart } from "../ui/profileChart";
 
-export function createPopup(map) {
+/**
+ * @param {import("ol/Map").default} map
+ * @param {{ onProfileHover?: (feature: import("ol/Feature").default, fraction: number|null) => void }} [options]
+ */
+export function createPopup(map, { onProfileHover } = {}) {
   const element = document.createElement("div");
   element.className = "popup";
   element.innerHTML = '<button class="popup-close" type="button" aria-label="Close">×</button><div class="popup-body"></div>';
@@ -19,7 +24,10 @@ export function createPopup(map) {
   });
   map.addOverlay(overlay);
 
+  let shownFeature = null;
   function hide() {
+    if (shownFeature) onProfileHover?.(shownFeature, null);
+    shownFeature = null;
     overlay.setPosition(undefined);
   }
   element.querySelector(".popup-close").addEventListener("click", hide);
@@ -29,9 +37,12 @@ export function createPopup(map) {
    * @param {number[]} coordinate map coordinate to anchor the popup at
    */
   function show(feature, coordinate) {
+    if (shownFeature && shownFeature !== feature) onProfileHover?.(shownFeature, null);
+    shownFeature = feature;
     const grade = getGrade(feature.get("grade"));
     const status = feature.get("status");
-    body.replaceChildren(
+    const profile = feature.get("profile");
+    const children = [
       el("h3", { textContent: feature.get("name") }),
       el("p", {}, [
         el("span", { className: `status-badge status-${status}`, textContent: feature.get("statusLabel") }),
@@ -42,10 +53,22 @@ export function createPopup(map) {
           textContent: feature.get("grade") ? `Grade ${feature.get("grade")} · ${grade.name}` : grade.name,
         }),
       ]),
-      feature.get("oneway") ? el("p", { className: "muted", textContent: "One-way trail: ride in the direction of the arrows." }) : null,
       feature.get("comments") ? el("p", { textContent: feature.get("comments") }) : null,
-      feature.get("surface") ? el("p", { className: "muted", textContent: `Surface: ${feature.get("surface")}` }) : null
-    );
+      el("p", {
+        className: "muted",
+        textContent: [
+          feature.get("oneway") ? "One-way: ride in the direction of the arrows." : "Two-way trail.",
+          feature.get("surface") ? `Surface: ${feature.get("surface")}.` : "",
+        ].join(" ").trim(),
+      }),
+      profile?.ele?.length > 1
+        ? createProfileChart(profile, {
+            direction: feature.get("oneway"),
+            onHover: (fraction) => onProfileHover?.(feature, fraction),
+          })
+        : el("p", { className: "muted", textContent: "No elevation profile for this trail yet." }),
+    ];
+    body.replaceChildren(...children.filter(Boolean));
     overlay.setPosition(coordinate);
   }
 

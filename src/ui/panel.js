@@ -3,6 +3,7 @@
  * Plain DOM, no framework.
  */
 import { getGrade, listGrades } from "../config";
+import { muted } from "../lib/color";
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
@@ -38,7 +39,10 @@ export function createPanel({ root, onTrailClick, onSaveOffline }) {
         ...listGrades().map(({ grade, name, color }) =>
           el("li", {}, [el("span", { className: "swatch", style: `background:${color}` }), `Grade ${grade} · ${name}`])
         ),
-        el("li", {}, [el("span", { className: "swatch swatch-closed" }), "Closed trail"]),
+        el("li", {}, [
+          el("span", { className: "swatch swatch-closed", style: `--closed-color:${muted(getGrade("2").color)}` }),
+          "Closed: grade colour, faded and dashed",
+        ]),
         el("li", {}, [el("span", { className: "swatch swatch-arrow", textContent: "›" }), "One-way direction"]),
       ]
     ),
@@ -67,7 +71,11 @@ export function createPanel({ root, onTrailClick, onSaveOffline }) {
         const grade = getGrade(p.grade);
         const item = el("li", { className: `trail trail-${p.status}`, dataset: { osmId: String(p.osmId) } }, [
           el("button", { type: "button", className: "trail-button" }, [
-            el("span", { className: "grade-dot", style: `background:${grade.color}`, title: grade.name }),
+            el("span", {
+              className: "grade-dot",
+              style: `background:${p.status === "closed" ? muted(grade.color) : grade.color}`,
+              title: grade.name,
+            }),
             el("span", { className: "trail-name", textContent: p.name }),
             el("span", { className: `status-badge status-${p.status}`, textContent: p.statusLabel }),
           ]),

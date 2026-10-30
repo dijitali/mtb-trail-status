@@ -96,7 +96,8 @@ body { display: flex; flex-direction: column; }
 .legend ul { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; }
 .legend li { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
 .swatch { display: inline-block; width: 28px; height: 6px; border-radius: 3px; }
-.swatch-closed { background: repeating-linear-gradient(90deg, #111 0 10px, #ffd400 10px 18px); }
+.swatch-closed { background: repeating-linear-gradient(90deg, var(--closed-color, #9fb0bd) 0 9px, transparent 9px 15px); }
+.trail-closed .trail-name { color: var(--muted); }
 .swatch-arrow { background: none; height: auto; font-weight: 900; font-size: 1.1rem; line-height: 1; text-align: center; }
 .offline-status { min-height: 1.2em; margin: 8px 0 0; }
 
@@ -109,7 +110,8 @@ body { display: flex; flex-direction: column; }
 }
 
 .popup {
-  position: relative; background: #fff; border-radius: 8px; padding: 12px 14px; min-width: 200px; max-width: 280px;
+  position: relative; background: #fff; border-radius: 8px; padding: 12px 14px;
+  width: 320px; max-width: calc(100vw - 24px);
   box-shadow: 0 2px 10px rgba(0,0,0,0.25);
 }
 .popup::after {
@@ -141,3 +143,31 @@ body { display: flex; flex-direction: column; }
   }
   .panel.open { transform: none; }
 }
+
+/* Elevation profile in the trail popup */
+.profile { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+.profile-stats { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; margin: 0 0 4px; }
+.profile-stats dt { font-size: 0.68rem; color: var(--muted); line-height: 1.2; }
+.profile-stats dd { margin: 2px 0 0; font-size: 0.9rem; font-weight: 650; white-space: nowrap; }
+.profile-chart { position: relative; }
+.profile-chart svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; border-radius: 4px; }
+.profile-chart svg:focus { outline: none; }
+.profile-chart svg:focus-visible { outline: 2px solid #3987e5; outline-offset: 2px; }
+.profile-chart .grid { stroke: #e6e9e6; stroke-width: 1; }
+.profile-chart .tick { font-size: 9.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.profile-chart .area { fill: #2b3530; fill-opacity: 0.1; stroke: none; }
+.profile-chart .line { fill: none; stroke: #2b3530; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.profile-chart .hit { fill: transparent; cursor: crosshair; }
+.profile-chart .cursor-line { stroke: #2b3530; stroke-opacity: 0.5; stroke-width: 1; }
+.profile-chart .cursor-dot { fill: #0d366b; stroke: #ffffff; stroke-width: 2; }
+.popup .profile-readout {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; min-height: 1.4em;
+  margin: 2px 0 2px; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.popup .profile-readout.active { color: var(--text); font-weight: 600; }
+.swatch-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.profile-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+.profile-key-title { font-weight: 650; color: var(--text); }
+.profile-key-item { display: inline-flex; align-items: center; gap: 4px; }
+.profile-key-swatch { width: 14px; height: 6px; border-radius: 1.5px; }
+.popup .profile-note { font-size: 0.72rem; color: var(--muted); margin: 6px 0 0; }

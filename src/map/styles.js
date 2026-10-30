@@ -9,11 +9,13 @@ import { Style, Stroke, Text, Fill, Icon } from "ol/style";
 import { Point } from "ol/geom";
 import { getGrade } from "../config";
 import { arrowsAlong } from "../lib/arrows";
+import { muted } from "../lib/color";
 
 const LINE_WIDTH = 4;
-const CLOSED_BASE = "#111111";
-const CLOSED_DASH = "#ffd400";
-const CLOSED_DASH_PATTERN = [10, 8];
+// Closed trails keep their grade hue but faded, dashed over a pale casing,
+// so closure reads at a glance without hiding the grade.
+const CLOSED_DASH_PATTERN = [9, 6];
+const CLOSED_CASING = "rgba(255, 255, 255, 0.85)";
 const ARROW_SPACING_PX = 90;
 const ARROW_MAX_RESOLUTION = 4; // metres/pixel, roughly zoom 15+. Arrows are noise when zoomed out.
 const HALO_WIDTH = 14;
@@ -63,15 +65,16 @@ function baseStyles(feature) {
     styles.push(new Style({ stroke: new Stroke({ color: "rgba(0, 120, 255, 0.35)", width: HALO_WIDTH }) }));
   }
   if (status === "closed") {
-    // Hazard-tape look: solid dark base with a yellow dash on top.
+    const faded = muted(color);
     styles.push(
-      new Style({ stroke: new Stroke({ color: CLOSED_BASE, width: LINE_WIDTH }) }),
-      new Style({ stroke: new Stroke({ color: CLOSED_DASH, width: LINE_WIDTH, lineDash: CLOSED_DASH_PATTERN }) })
+      new Style({ stroke: new Stroke({ color: CLOSED_CASING, width: LINE_WIDTH + 2 }) }),
+      new Style({ stroke: new Stroke({ color: faded, width: LINE_WIDTH, lineDash: CLOSED_DASH_PATTERN, lineCap: "butt" }) })
     );
+    styles.push(labelStyle(`${name} (closed)`, muted(color, 0.35)));
   } else {
     styles.push(new Style({ stroke: new Stroke({ color, width: LINE_WIDTH }) }));
+    styles.push(labelStyle(name, color));
   }
-  styles.push(labelStyle(name, status === "closed" ? CLOSED_BASE : color));
   baseStyleCache.set(key, styles);
   return styles;
 }
